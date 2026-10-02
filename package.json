@@ -6,15 +6,20 @@
   "type": "commonjs",
   "main": "src/server.js",
   "scripts": {
-    "start": "node --experimental-sqlite --disable-warning=ExperimentalWarning src/server.js",
+    "setup": "node scripts/make-env.js",
+    "start": "node --env-file=.env --experimental-sqlite --disable-warning=ExperimentalWarning src/server.js",
     "test": "node --experimental-sqlite --disable-warning=ExperimentalWarning --test \"test/**/*.test.js\"",
-    "users": "node --experimental-sqlite --disable-warning=ExperimentalWarning scripts/show-users.js"
+    "users": "node --experimental-sqlite --disable-warning=ExperimentalWarning scripts/show-users.js",
+    "sessions": "node --experimental-sqlite --disable-warning=ExperimentalWarning scripts/show-sessions.js",
+    "claim-memos": "node --experimental-sqlite --disable-warning=ExperimentalWarning scripts/claim-memos.js"
   },
   "engines": {
     "node": ">=22.5"
   },
   "dependencies": {
     "@node-rs/argon2": "^2.2.1",
-    "express": "^5.2.1"
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.7.0",
+    "express-session": "^1.19.0"
   }
 }

@@ -1,20 +1,25 @@
-// 1단계 검사: 메모 API 기본 동작
+// 1단계 검사(3단계에서 갱신): 메모 기능은 "로그인한 주인"에게 예전과 똑같이 동작해야 한다.
+// 3단계부터 메모는 로그인해야 쓸 수 있으므로, 같은 검사를 로그인한 클라이언트로 실행한다.
+// (로그인하지 않은 요청이 거부되는지는 session.test.js 에서 따로 검사)
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
-const { startTestServer, request } = require('./helpers');
+const { startTestServer, request, signup, login } = require('./helpers');
 
 let srv;
+let owner;
 before(async () => {
   srv = await startTestServer();
+  await signup(srv.baseUrl, 'memo-owner@example.test');
+  owner = await login(srv.baseUrl, 'memo-owner@example.test');
 });
 after(async () => {
   await srv.close();
 });
 
-const call = (method, path, body) => request(srv.baseUrl, method, path, body);
+const call = (method, path, body) => owner.send(method, path, body);
 
-test('서버 상태 확인: GET /health → 200', async () => {
-  const res = await call('GET', '/health');
+test('서버 상태 확인: GET /health → 200 (로그인 없이도 가능)', async () => {
+  const res = await request(srv.baseUrl, 'GET', '/health');
   assert.equal(res.status, 200);
   assert.deepEqual(res.json, { ok: true });
 });

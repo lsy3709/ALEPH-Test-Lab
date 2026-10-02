@@ -42,6 +42,24 @@ function migrate(db) {
       COMMIT;
     `);
   }
+
+  // 3단계: 메모에 주인(user_id)을 붙이고, 로그인 세션을 서버 쪽 표에 저장한다.
+  // 이전 단계에서 만든 메모는 지우지 않고 user_id = NULL(주인 없음)로 남긴다 → 아무에게도 보이지 않음.
+  if (version < 3) {
+    db.exec(`
+      BEGIN;
+      ALTER TABLE memos ADD COLUMN user_id INTEGER REFERENCES users(id) ON DELETE CASCADE;
+      CREATE INDEX memos_user_id ON memos(user_id);
+      CREATE TABLE sessions (
+        sid        TEXT PRIMARY KEY,
+        sess       TEXT NOT NULL,
+        expires_at INTEGER NOT NULL
+      );
+      CREATE INDEX sessions_expires_at ON sessions(expires_at);
+      PRAGMA user_version = 3;
+      COMMIT;
+    `);
+  }
 }
 
 module.exports = { openDb };
