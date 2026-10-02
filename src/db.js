@@ -74,6 +74,31 @@ function migrate(db) {
       COMMIT;
     `);
   }
+
+  // 5단계: 계정별 등록 기기. 서버는 공개키만 저장하고, 같은 기기인지는 공개키 지문(key_id)으로 판단한다.
+  // name 은 사람이 읽는 이름표, reported_posture 는 기기가 주장하는 모의 보안 상태 — 둘 다 허용 판단에 쓰지 않는다.
+  if (version < 5) {
+    db.exec(`
+      BEGIN;
+      CREATE TABLE devices (
+        id               TEXT PRIMARY KEY,                    -- 무작위 UUID
+        user_id          INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        name             TEXT NOT NULL,
+        key_id           TEXT NOT NULL,                       -- 공개키 SHA-256 지문
+        public_key       TEXT NOT NULL,                       -- Ed25519 공개키(SPKI DER, base64url)
+        status           TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'blocked')),
+        reported_posture TEXT,
+        created_at       INTEGER NOT NULL,                    -- 시각은 모두 ms
+        expires_at       INTEGER NOT NULL,
+        last_used_at     INTEGER,
+        blocked_at       INTEGER,
+        UNIQUE (user_id, key_id)
+      );
+      CREATE INDEX devices_user_id ON devices(user_id);
+      PRAGMA user_version = 5;
+      COMMIT;
+    `);
+  }
 }
 
 module.exports = { openDb };

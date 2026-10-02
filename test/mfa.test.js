@@ -23,8 +23,12 @@ after(async () => {
   await srv.close();
 });
 
+// 5단계부터 메모는 "기기 확인"까지 필요하므로, 이 파일에서 "추가 인증까지 마쳤는지"를 확인하는 주소로는
+// 추가 인증까지만 요구하는 /devices(내 기기 목록)를 쓴다. 추가 인증 전 메모 403 검사는 그대로 /memos 로 한다.
+const MFA_PROTECTED = '/devices';
+
 const userRow = (email) => srv.db.prepare('SELECT * FROM users WHERE email = ?').get(email);
-const replay = (cookieValue, path = '/memos') =>
+const replay = (cookieValue, path = MFA_PROTECTED) =>
   request(srv.baseUrl, 'GET', path, undefined, { cookie: `${SESSION_COOKIE}=${cookieValue}` });
 
 // 가입 + 인증 앱 등록까지 끝낸 뒤 로그아웃한 계정을 만든다
@@ -35,6 +39,7 @@ async function enrolledAccount(email) {
 }
 
 test('로그인만 하고 추가 인증 0회 → 메모 API 403 (등록 전: mfa_setup_required)', async () => {
+  // (참고) 메모 주소의 문지기 순서: 로그인 → 추가 인증 → 기기 확인. 여기서는 두 번째 문지기에서 걸린다.
   await signup(srv.baseUrl, 'no-mfa@example.test');
   const client = createClient(srv.baseUrl);
   const res = await client.send('POST', '/auth/login', { email: 'no-mfa@example.test', password: FAKE_PASSWORD });
@@ -48,7 +53,7 @@ test('로그인만 하고 추가 인증 0회 → 메모 API 403 (등록 전: mfa
   }
 });
 
-test('인증 앱 등록: 비밀값은 등록할 때 한 번만 주고, 틀린 코드로는 등록되지 않으며, 맞는 코드로 등록하면 메모 사용 가능', async () => {
+test('인증 앱 등록: 비밀값은 등록할 때 한 번만 주고, 틀린 코드로는 등록되지 않으며, 맞는 코드로 등록하면 추가 인증이 필요한 주소 사용 가능', async () => {
   await signup(srv.baseUrl, 'enroll@example.test');
   const client = await login(srv.baseUrl, 'enroll@example.test');
 
@@ -70,7 +75,7 @@ test('인증 앱 등록: 비밀값은 등록할 때 한 번만 주고, 틀린 �
   assert.equal(ok.status, 200);
   assert.equal(userRow('enroll@example.test').totp_enabled, 1);
 
-  assert.equal((await client.send('GET', '/memos')).status, 200);
+  assert.equal((await client.send('GET', MFA_PROTECTED)).status, 200);
   const me = await client.send('GET', '/auth/me');
   assert.deepEqual(me.json.mfa, { enabled: true, verified: true });
   assert.ok(!JSON.stringify(me.json).includes(setup.json.secret), '등록 뒤에는 비밀값을 다시 보여 주지 않음');
@@ -88,7 +93,7 @@ test('등록된 계정: 로그인 직후 403(mfa_required) → 맞는 코드 입
 
   srv.clock.advance(30_000);
   assert.equal((await verifyMfa(srv, client, 'verify@example.test')).status, 200);
-  assert.equal((await client.send('GET', '/memos')).status, 200);
+  assert.equal((await client.send('GET', MFA_PROTECTED)).status, 200);
 });
 
 test('틀린 코드·형식이 다른 코드·누구나 아는 고정 번호는 모두 거부', async () => {

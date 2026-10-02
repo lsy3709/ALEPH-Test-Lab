@@ -11,7 +11,7 @@ const {
   createClient,
   signup,
   login,
-  loginWithMfa,
+  loginFull,
   sessionIdFromCookie,
 } = require('./helpers');
 
@@ -99,9 +99,9 @@ test('로그인 없이 메모 API → 401 (목록·만들기·읽기·지우기�
 });
 
 test('남의 메모는 읽기·지우기 모두 404, 목록에도 보이지 않는다 (주소의 id 바꾸기 우회 차단)', async () => {
-  // 4단계부터 메모는 추가 인증까지 마쳐야 쓸 수 있으므로 두 사람 모두 그 상태로 시험한다
-  const owner = await loginWithMfa(srv, 'owner@example.test');
-  const other = await loginWithMfa(srv, 'other@example.test');
+  // 4단계부터 추가 인증, 5단계부터 기기 확인까지 마쳐야 메모를 쓸 수 있으므로 두 사람 모두 그 상태로 시험한다
+  const owner = await loginFull(srv, 'owner@example.test');
+  const other = await loginFull(srv, 'other@example.test');
   const created = await owner.send('POST', '/memos', { title: '주인 메모', body: '가짜 데이터' });
   const id = created.json.memo.id;
 
@@ -173,7 +173,7 @@ test('계정이 삭제되면 남아 있던 세션도 통하지 않는다', async
 });
 
 test('JSON 이 아닌 형식(text/plain)으로 몰래 보낸 메모는 저장되지 않는다 (다른 사이트 위조 요청 대비)', async () => {
-  const client = await loginWithMfa(srv, 'owner@example.test');
+  const client = await loginFull(srv, 'owner@example.test');
   const res = await client.send('POST', '/memos', '{"title":"몰래 만든 메모"}', { 'content-type': 'text/plain' });
   assert.equal(res.status, 400);
   const count = srv.db.prepare("SELECT COUNT(*) AS n FROM memos WHERE title = '몰래 만든 메모'").get().n;

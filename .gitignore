@@ -7,3 +7,6 @@ data/
 
 # 비밀값 파일(절대 올리지 않음)
 .env
+
+# 기기 개인키 폴더(npm run device -- init 으로 만든 실습 기기 키. 절대 올리지 않음)
+devices/

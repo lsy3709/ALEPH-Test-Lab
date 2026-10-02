@@ -13,7 +13,9 @@
     "sessions": "node --experimental-sqlite --disable-warning=ExperimentalWarning scripts/show-sessions.js",
     "claim-memos": "node --experimental-sqlite --disable-warning=ExperimentalWarning scripts/claim-memos.js",
     "mfa-reset": "node --experimental-sqlite --disable-warning=ExperimentalWarning scripts/mfa-reset.js",
-    "password-reset": "node --experimental-sqlite --disable-warning=ExperimentalWarning scripts/password-reset.js"
+    "password-reset": "node --experimental-sqlite --disable-warning=ExperimentalWarning scripts/password-reset.js",
+    "device": "node scripts/device.js",
+    "devices-admin": "node --experimental-sqlite --disable-warning=ExperimentalWarning scripts/devices-admin.js"
   },
   "engines": {
     "node": ">=22.5"

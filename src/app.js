@@ -1,8 +1,9 @@
-// 앱 조립: 공통 설정 → 세션 → 계정·추가 인증 주소 → (로그인 + 추가 인증 확인 후) 메모 주소 → 404·오류 처리
+// 앱 조립: 공통 설정 → 세션 → 계정·추가 인증·기기 주소 → (로그인 + 추가 인증 + 기기 확인 후) 메모 주소 → 404·오류 처리
 const express = require('express');
 const session = require('express-session');
 const { createAuthRouter, requireLogin } = require('./auth');
 const { createMfaRouter, requireMfa } = require('./mfa');
+const { createDevicesRouter, requireDevice } = require('./devices');
 const { createMemosRouter } = require('./memos');
 const { SqliteSessionStore } = require('./session-store');
 
@@ -51,10 +52,14 @@ function createApp({ db, sessionSecret, loginRateLimit, mfaLock, clock = REAL_CL
   app.use('/auth/mfa', requireLogin(db), createMfaRouter({ db, clock, lock: mfaLock }));
 
   // 계정(가입·로그인·로그아웃·내 정보) 주소는 auth.js 에 모아 둔다
-  app.use('/auth', createAuthRouter({ db, cookieName: SESSION_COOKIE, loginRateLimit }));
+  app.use('/auth', createAuthRouter({ db, cookieName: SESSION_COOKIE, loginRateLimit, clock }));
 
-  // 메모 주소는 문지기 두 명을 차례로 통과해야 한다: 로그인(401) → 추가 인증 완료(403)
-  app.use('/memos', requireLogin(db), requireMfa(db), createMemosRouter({ db }));
+  // 기기 주소(목록·문제 받기·등록·확인·차단)는 로그인 + 추가 인증을 마쳐야 쓸 수 있다.
+  // (기기 확인은 요구하지 않는다 — 노트북을 잃어버렸을 때 다른 곳에서 차단할 수 있어야 하므로)
+  app.use('/devices', requireLogin(db), requireMfa(db), createDevicesRouter({ db, clock }));
+
+  // 메모 주소는 문지기 세 명을 차례로 통과해야 한다: 로그인(401) → 추가 인증 완료(403) → 등록 기기 확인(403)
+  app.use('/memos', requireLogin(db), requireMfa(db), requireDevice(db, clock), createMemosRouter({ db }));
 
   // 위 어디에도 해당하지 않는 주소
   app.use((req, res) => {

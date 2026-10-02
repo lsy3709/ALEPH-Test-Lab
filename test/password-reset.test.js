@@ -1,7 +1,7 @@
 // 관리자 도구 검사: 비밀번호 재설정(npm run password-reset)
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
-const { FAKE_PASSWORD, startTestServer, request, signup, loginWithMfa } = require('./helpers');
+const { FAKE_PASSWORD, startTestServer, request, signup, loginFull } = require('./helpers');
 const { resetPassword } = require('../scripts/password-reset');
 
 const NEW_PASSWORD = 'lab-only-NewPass-2026'; // 테스트 전용 가짜 새 비밀번호
@@ -20,8 +20,8 @@ const loginAs = (email, password) => request(srv.baseUrl, 'POST', '/auth/login',
 test('재설정 후에는 새 비밀번호로만 로그인되고, 그 계정의 세션은 모두 끊기며, 다른 계정과 추가 인증 등록은 그대로', async () => {
   await signup(srv.baseUrl, 'reset-me@example.test');
   await signup(srv.baseUrl, 'bystander@example.test');
-  const mine = await loginWithMfa(srv, 'reset-me@example.test');
-  const theirs = await loginWithMfa(srv, 'bystander@example.test');
+  const mine = await loginFull(srv, 'reset-me@example.test');
+  const theirs = await loginFull(srv, 'bystander@example.test');
   await mine.send('POST', '/memos', { title: '재설정 전 메모', body: '가짜 데이터' });
 
   const result = await resetPassword(srv.db, 'reset-me@example.test', NEW_PASSWORD);
@@ -35,7 +35,7 @@ test('재설정 후에는 새 비밀번호로만 로그인되고, 그 계정의 
   assert.equal(fresh.status, 200);
   assert.equal(fresh.json.mfa, 'verify_required', '추가 인증 등록은 풀리지 않음');
 
-  const again = await loginWithMfa(srv, 'reset-me@example.test', NEW_PASSWORD);
+  const again = await loginFull(srv, 'reset-me@example.test', { password: NEW_PASSWORD });
   const memos = await again.send('GET', '/memos');
   assert.deepEqual(memos.json.memos.map((m) => m.title), ['재설정 전 메모'], '메모 데이터 보존');
 

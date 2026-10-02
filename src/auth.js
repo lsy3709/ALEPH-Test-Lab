@@ -3,6 +3,7 @@ const express = require('express');
 const rateLimit = require('express-rate-limit');
 const { checkPasswordPolicy, hashPassword, verifyPassword } = require('./passwords');
 const { regenerateSession, saveSession } = require('./session-utils');
+const { deviceState } = require('./devices');
 
 const SQLITE_CONSTRAINT_UNIQUE = 2067; // SQLite 오류 번호: UNIQUE(중복 금지) 규칙 위반
 const MAX_EMAIL = 254;
@@ -59,7 +60,7 @@ function createLoginLimiter({ limit = 10, windowMs = 15 * 60 * 1000 } = {}) {
   });
 }
 
-function createAuthRouter({ db, cookieName, loginRateLimit }) {
+function createAuthRouter({ db, cookieName, loginRateLimit, clock }) {
   const router = express.Router();
 
   // 가입: 이메일·비밀번호 검사 → 비밀번호 해시 → 사용자 저장 (로그인은 따로)
@@ -123,10 +124,18 @@ function createAuthRouter({ db, cookieName, loginRateLimit }) {
   });
 
   // 내 정보: 서버가 이 요청을 누구의 로그인으로, 어느 인증 단계까지로 보고 있는지 확인하는 용도
-  // (추가 인증 비밀값은 절대 넣지 않는다)
+  // (추가 인증 비밀값·기기 공개키는 넣지 않는다)
   router.get('/me', requireLogin(db), (req, res) => {
     const { totp_enabled: enabled } = db.prepare('SELECT totp_enabled FROM users WHERE id = ?').get(req.user.id);
-    res.json({ user: req.user, mfa: { enabled: enabled === 1, verified: req.session.mfaVerified === true } });
+    const deviceId = req.session.deviceId;
+    const device = deviceId
+      ? db.prepare('SELECT id, name, status, expires_at FROM devices WHERE id = ? AND user_id = ?').get(deviceId, req.user.id)
+      : undefined;
+    res.json({
+      user: req.user,
+      mfa: { enabled: enabled === 1, verified: req.session.mfaVerified === true },
+      device: device ? { id: device.id, name: device.name, state: deviceState(device, clock.now()) } : null,
+    });
   });
 
   return router;

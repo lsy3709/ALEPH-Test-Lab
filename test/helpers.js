@@ -2,6 +2,7 @@
 const OTPAuth = require('otpauth');
 const { openDb } = require('../src/db');
 const { createApp } = require('../src/app');
+const { createDeviceKeys, proofFor } = require('../scripts/device');
 
 // 테스트 전용 가짜 값(실제 .env 의 비밀키나 실제 비밀번호가 아님)
 const TEST_SESSION_SECRET = 'test-only-session-secret-0123456789abcdef';
@@ -27,7 +28,8 @@ async function startTestServer(options = {}) {
   const baseUrl = `http://127.0.0.1:${server.address().port}`;
   const close = () => new Promise((resolve) => server.close(resolve));
   // authenticatorApp: 휴대폰 인증 앱 흉내 — 등록할 때 받은 비밀값을 이메일별로 기억한다
-  return { db, baseUrl, close, clock, authenticatorApp: new Map() };
+  // devices: 기기 흉내 — 이메일별로 등록해 둔 기기(키 쌍)를 기억한다
+  return { db, baseUrl, close, clock, authenticatorApp: new Map(), devices: new Map() };
 }
 
 // body 가 문자열이면 그대로(깨진 JSON 시험용), 객체면 JSON 으로 바꿔 보낸다.
@@ -123,6 +125,43 @@ async function loginWithMfa(srv, email, password = FAKE_PASSWORD) {
   return client;
 }
 
+// 기기 흉내: 기기 도우미(scripts/device.js)와 같은 방법으로 키 쌍을 만들고 서명한다.
+// 개인키는 이 객체 안에만 있고 서버로 보내지 않는다.
+function testDevice(name = 'test-device', posture) {
+  const keys = createDeviceKeys();
+  return { name, publicKey: keys.publicKey, proof: (message) => proofFor(message, { ...keys, name, posture }) };
+}
+
+// 서버에 문제(challenge)를 받아 기기로 서명한 뒤 등록 요청
+async function registerDevice(client, device) {
+  const challenge = await client.send('POST', '/devices/challenge', { purpose: 'register' });
+  if (challenge.status !== 200) return challenge;
+  return client.send('POST', '/devices', device.proof(challenge.json.message));
+}
+
+// 서버에 문제(challenge)를 받아 등록된 기기로 서명해 "이 기기에서 접속 중"을 확인받는다
+async function verifyDevice(client, device) {
+  const challenge = await client.send('POST', '/devices/challenge', { purpose: 'login' });
+  if (challenge.status !== 200) return challenge;
+  return client.send('POST', '/devices/verify', device.proof(challenge.json.message));
+}
+
+// 로그인 + 추가 인증 + 기기 확인까지 마친 클라이언트. 이메일별 기기가 없으면 새로 등록한다.
+async function loginFull(srv, email, { password = FAKE_PASSWORD } = {}) {
+  const client = await loginWithMfa(srv, email, password);
+  const known = srv.devices.get(email);
+  if (known) {
+    const res = await verifyDevice(client, known);
+    if (res.status !== 200) throw new Error(`기기 확인 실패(${res.status}): ${email}`);
+  } else {
+    const device = testDevice(`device-${srv.devices.size + 1}`);
+    const res = await registerDevice(client, device);
+    if (res.status !== 201) throw new Error(`기기 등록 실패(${res.status}): ${email}`);
+    srv.devices.set(email, device);
+  }
+  return client;
+}
+
 // 쿠키 값(s%3A<세션번호>.<서명>)에서 세션 번호만 꺼낸다 — 서버 세션 표와 대조할 때 쓴다
 function sessionIdFromCookie(cookieValue) {
   const raw = decodeURIComponent(cookieValue);
@@ -143,5 +182,9 @@ module.exports = {
   enrollMfa,
   verifyMfa,
   loginWithMfa,
+  testDevice,
+  registerDevice,
+  verifyDevice,
+  loginFull,
   sessionIdFromCookie,
 };

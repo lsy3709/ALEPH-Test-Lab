@@ -10,6 +10,16 @@ const { openDb } = require('../src/db');
 const tableExists = (db, name) =>
   Boolean(db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(name));
 
+// DB를 열어 fn 을 실행하고, 중간에 실패해도 반드시 닫는다(Windows 는 열린 파일이 있으면 임시 폴더를 못 지움)
+function withDb(file, fn) {
+  const db = openDb(file);
+  try {
+    return fn(db);
+  } finally {
+    db.close();
+  }
+}
+
 test('1단계 DB의 메모를 보존한 채 이후 단계 구조로 올라간다', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'memo-lab-'));
   const file = path.join(dir, 'step1.db');
@@ -28,17 +38,19 @@ test('1단계 DB의 메모를 보존한 채 이후 단계 구조로 올라간다
     old.prepare('INSERT INTO memos (title, body) VALUES (?, ?)').run('1단계 메모', '가짜 데이터');
     old.close();
 
-    const db = openDb(file);
-    const memo = db.prepare('SELECT title, body, user_id FROM memos').get();
-    const { user_version: version } = db.prepare('PRAGMA user_version').get();
-    const hasUsers = tableExists(db, 'users');
-    const hasSessions = tableExists(db, 'sessions');
-    db.close();
+    const { memo, version, hasUsers, hasSessions, hasDevices } = withDb(file, (db) => ({
+      memo: db.prepare('SELECT title, body, user_id FROM memos').get(),
+      version: db.prepare('PRAGMA user_version').get().user_version,
+      hasUsers: tableExists(db, 'users'),
+      hasSessions: tableExists(db, 'sessions'),
+      hasDevices: tableExists(db, 'devices'),
+    }));
 
     assert.deepEqual({ ...memo }, { title: '1단계 메모', body: '가짜 데이터', user_id: null });
-    assert.ok(version >= 4);
+    assert.ok(version >= 5);
     assert.ok(hasUsers, 'users 표가 있어야 함');
     assert.ok(hasSessions, 'sessions 표가 있어야 함');
+    assert.ok(hasDevices, 'devices 표가 있어야 함');
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -68,10 +80,10 @@ test('2단계 DB(계정 있음)를 열어도 계정과 비밀번호 해시가 �
     old.prepare('INSERT INTO memos (title) VALUES (?)').run('2단계 메모');
     old.close();
 
-    const db = openDb(file);
-    const user = db.prepare('SELECT email, password_hash, totp_secret, totp_enabled FROM users').get();
-    const memo = db.prepare('SELECT title, user_id FROM memos').get();
-    db.close();
+    const { user, memo } = withDb(file, (db) => ({
+      user: db.prepare('SELECT email, password_hash, totp_secret, totp_enabled FROM users').get(),
+      memo: db.prepare('SELECT title, user_id FROM memos').get(),
+    }));
 
     // 계정·해시는 그대로, 추가 인증은 "아직 등록 안 됨"으로 시작한다
     assert.deepEqual(
