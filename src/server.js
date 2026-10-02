@@ -11,6 +11,15 @@ fs.mkdirSync(path.dirname(DB_FILE), { recursive: true });
 const db = openDb(DB_FILE);
 const app = createApp({ db });
 
-app.listen(PORT, '127.0.0.1', () => {
+// Express 5 는 시작에 실패해도 이 함수를 부르고, 실패 이유를 err 로 넘겨 준다.
+app.listen(PORT, '127.0.0.1', (err) => {
+  if (err) {
+    const reason =
+      err.code === 'EADDRINUSE'
+        ? `포트 ${PORT}번을 이미 다른 프로그램(예: 전에 켜 둔 서버)이 쓰고 있습니다. 그 창에서 Ctrl + C 로 끄고 다시 실행하세요.`
+        : err.message;
+    console.error(`서버를 시작하지 못했습니다: ${reason}`);
+    process.exit(1);
+  }
   console.log(`메모 API 실행 중: http://127.0.0.1:${PORT}  (종료: Ctrl + C)`);
 });

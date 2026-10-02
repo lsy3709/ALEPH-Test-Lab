@@ -1,5 +1,6 @@
 // 메모 API의 주소(라우트)와 처리 규칙
 const express = require('express');
+const { createAuthRouter } = require('./auth');
 
 const MEMO_COLUMNS = 'id, title, body, created_at AS createdAt';
 const MAX_TITLE = 100;
@@ -27,6 +28,9 @@ function createApp({ db }) {
   app.get('/health', (req, res) => {
     res.json({ ok: true });
   });
+
+  // 계정(가입 등) 주소는 auth.js 에 모아 둔다
+  app.use('/auth', createAuthRouter({ db }));
 
   // 메모 목록
   app.get('/memos', (req, res) => {

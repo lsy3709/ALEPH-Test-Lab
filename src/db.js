@@ -27,6 +27,21 @@ function migrate(db) {
       COMMIT;
     `);
   }
+
+  // 2단계: 사용자 표. 비밀번호는 원문이 아니라 해시(password_hash)만 저장한다.
+  if (version < 2) {
+    db.exec(`
+      BEGIN;
+      CREATE TABLE users (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        email         TEXT NOT NULL UNIQUE,
+        password_hash TEXT NOT NULL,
+        created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      PRAGMA user_version = 2;
+      COMMIT;
+    `);
+  }
 }
 
 module.exports = { openDb };
