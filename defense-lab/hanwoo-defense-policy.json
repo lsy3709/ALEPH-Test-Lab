@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "missionId": "hanwoo",
+  "policy": {
+    "requireLogin": true,
+    "requireMfa": true
+  }
+}
