@@ -22,12 +22,20 @@ if (!hasUsers) {
 const columns = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
 console.log(`users 표의 칸: ${columns.join(', ')}`);
 
-const rows = db.prepare('SELECT id, email, password_hash, created_at FROM users ORDER BY id').all();
+// 4단계 이후에는 추가 인증 상태도 보여 준다. 추가 인증 비밀값(totp_secret)은 절대 출력하지 않는다.
+const hasMfa = columns.includes('totp_enabled');
+const mfaColumns = hasMfa ? ', totp_enabled, totp_failures, totp_locked_until' : '';
+const rows = db.prepare(`SELECT id, email, password_hash, created_at${mfaColumns} FROM users ORDER BY id`).all();
+const now = Date.now();
 console.table(
   rows.map((r) => ({
     id: r.id,
     email: r.email,
     password_hash: `${r.password_hash.slice(0, 40)}…(총 ${r.password_hash.length}자)`,
+    ...(hasMfa && {
+      mfa: r.totp_enabled ? '등록됨' : '미등록',
+      locked: r.totp_locked_until > now ? `잠김(~${new Date(r.totp_locked_until).toLocaleTimeString('ko-KR')})` : '',
+    }),
     created_at: r.created_at,
   })),
 );

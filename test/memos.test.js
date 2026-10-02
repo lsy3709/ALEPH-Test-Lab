@@ -1,16 +1,16 @@
-// 1단계 검사(3단계에서 갱신): 메모 기능은 "로그인한 주인"에게 예전과 똑같이 동작해야 한다.
-// 3단계부터 메모는 로그인해야 쓸 수 있으므로, 같은 검사를 로그인한 클라이언트로 실행한다.
-// (로그인하지 않은 요청이 거부되는지는 session.test.js 에서 따로 검사)
+// 1단계 검사(3·4단계에서 갱신): 메모 기능은 "로그인 + 추가 인증을 마친 주인"에게 예전과 똑같이 동작해야 한다.
+// 3단계부터 로그인, 4단계부터 추가 인증이 필요하므로 같은 검사를 그 상태의 클라이언트로 실행한다.
+// (로그인·추가 인증 없이 보낸 요청이 거부되는지는 session.test.js·mfa.test.js 에서 따로 검사)
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
-const { startTestServer, request, signup, login } = require('./helpers');
+const { startTestServer, request, signup, loginWithMfa } = require('./helpers');
 
 let srv;
 let owner;
 before(async () => {
   srv = await startTestServer();
   await signup(srv.baseUrl, 'memo-owner@example.test');
-  owner = await login(srv.baseUrl, 'memo-owner@example.test');
+  owner = await loginWithMfa(srv, 'memo-owner@example.test');
 });
 after(async () => {
   await srv.close();

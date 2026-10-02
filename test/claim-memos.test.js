@@ -1,7 +1,7 @@
 // 3단계 검사: 이전 단계에서 만든 "주인 없는 메모"를 실습 계정에 연결하는 개발용 도구
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { startTestServer, signup, login } = require('./helpers');
+const { startTestServer, signup, loginWithMfa } = require('./helpers');
 const { assignOrphanMemos } = require('../scripts/claim-memos');
 
 test('주인 없는 메모는 아무에게도 안 보이다가, 연결한 계정에게만 보인다', async () => {
@@ -10,8 +10,8 @@ test('주인 없는 메모는 아무에게도 안 보이다가, 연결한 계정
     srv.db.prepare('INSERT INTO memos (title, body) VALUES (?, ?)').run('옛 메모', '가짜 데이터'); // user_id = NULL
     await signup(srv.baseUrl, 'claimer@example.test');
     await signup(srv.baseUrl, 'bystander@example.test');
-    const claimer = await login(srv.baseUrl, 'claimer@example.test');
-    const bystander = await login(srv.baseUrl, 'bystander@example.test');
+    const claimer = await loginWithMfa(srv, 'claimer@example.test');
+    const bystander = await loginWithMfa(srv, 'bystander@example.test');
 
     assert.equal((await claimer.send('GET', '/memos')).json.memos.length, 0, '연결 전에는 안 보임');
 

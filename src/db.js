@@ -60,6 +60,20 @@ function migrate(db) {
       COMMIT;
     `);
   }
+
+  // 4단계: 추가 인증(TOTP). 기존 계정은 "아직 등록 안 됨(totp_enabled = 0)"으로 시작한다.
+  if (version < 4) {
+    db.exec(`
+      BEGIN;
+      ALTER TABLE users ADD COLUMN totp_secret TEXT;                         -- 인증 앱과 나눠 가진 비밀값(base32)
+      ALTER TABLE users ADD COLUMN totp_enabled INTEGER NOT NULL DEFAULT 0;  -- 1 = 등록 완료
+      ALTER TABLE users ADD COLUMN totp_last_step INTEGER;                   -- 마지막으로 통과한 코드의 30초 칸 번호(재사용 방지)
+      ALTER TABLE users ADD COLUMN totp_failures INTEGER NOT NULL DEFAULT 0; -- 연속 실패 횟수
+      ALTER TABLE users ADD COLUMN totp_locked_until INTEGER;                -- 이 시각(ms)까지 추가 인증 잠금
+      PRAGMA user_version = 4;
+      COMMIT;
+    `);
+  }
 }
 
 module.exports = { openDb };

@@ -36,7 +36,7 @@ test('1단계 DB의 메모를 보존한 채 이후 단계 구조로 올라간다
     db.close();
 
     assert.deepEqual({ ...memo }, { title: '1단계 메모', body: '가짜 데이터', user_id: null });
-    assert.ok(version >= 3);
+    assert.ok(version >= 4);
     assert.ok(hasUsers, 'users 표가 있어야 함');
     assert.ok(hasSessions, 'sessions 표가 있어야 함');
   } finally {
@@ -69,11 +69,15 @@ test('2단계 DB(계정 있음)를 열어도 계정과 비밀번호 해시가 �
     old.close();
 
     const db = openDb(file);
-    const user = db.prepare('SELECT email, password_hash FROM users').get();
+    const user = db.prepare('SELECT email, password_hash, totp_secret, totp_enabled FROM users').get();
     const memo = db.prepare('SELECT title, user_id FROM memos').get();
     db.close();
 
-    assert.deepEqual({ ...user }, { email: 'student1@example.test', password_hash: '$argon2id$fake-hash' });
+    // 계정·해시는 그대로, 추가 인증은 "아직 등록 안 됨"으로 시작한다
+    assert.deepEqual(
+      { ...user },
+      { email: 'student1@example.test', password_hash: '$argon2id$fake-hash', totp_secret: null, totp_enabled: 0 },
+    );
     assert.deepEqual({ ...memo }, { title: '2단계 메모', user_id: null });
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });

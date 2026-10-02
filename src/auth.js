@@ -2,6 +2,7 @@
 const express = require('express');
 const rateLimit = require('express-rate-limit');
 const { checkPasswordPolicy, hashPassword, verifyPassword } = require('./passwords');
+const { regenerateSession, saveSession } = require('./session-utils');
 
 const SQLITE_CONSTRAINT_UNIQUE = 2067; // SQLite 오류 번호: UNIQUE(중복 금지) 규칙 위반
 const MAX_EMAIL = 254;
@@ -30,12 +31,6 @@ function isPracticeEmail(email) {
   const domain = email.split('@')[1];
   return PRACTICE_DOMAINS.includes(domain) || PRACTICE_SUFFIXES.some((suffix) => domain.endsWith(suffix));
 }
-
-// express-session 의 콜백 함수를 await 로 쓸 수 있게 감싼다
-const regenerateSession = (req) =>
-  new Promise((resolve, reject) => req.session.regenerate((err) => (err ? reject(err) : resolve())));
-const saveSession = (req) =>
-  new Promise((resolve, reject) => req.session.save((err) => (err ? reject(err) : resolve())));
 
 // 문지기: 서버에 저장된 세션에 userId 가 있고 그 계정이 아직 있을 때만 통과시킨다.
 // 화면이나 요청 본문이 아니라 "서버 세션"만 믿는다.
@@ -97,18 +92,25 @@ function createAuthRouter({ db, cookieName, loginRateLimit }) {
   });
 
   // 로그인: 비밀번호 확인 → 세션 번호를 새로 발급(세션 고정 방지) → 세션에 userId 저장
+  // 비밀번호만 통과한 상태이므로 mfaVerified = false. 다음 할 일(등록/확인)을 mfa 로 알려 준다.
   router.post('/login', createLoginLimiter(loginRateLimit), async (req, res) => {
     const email = normalizeEmail(req.body?.email);
     const password = typeof req.body?.password === 'string' ? req.body.password : '';
-    const user = email ? db.prepare('SELECT id, email, password_hash FROM users WHERE email = ?').get(email) : undefined;
+    const user = email
+      ? db.prepare('SELECT id, email, password_hash, totp_enabled FROM users WHERE email = ?').get(email)
+      : undefined;
 
     const passwordOk = await verifyPassword(user ? user.password_hash : await dummyHash, password);
     if (!user || !passwordOk) return res.status(401).json(INVALID_LOGIN); // 어느 쪽이 틀렸는지 알려 주지 않는다
 
     await regenerateSession(req);
     req.session.userId = user.id;
+    req.session.mfaVerified = false;
     await saveSession(req);
-    res.json({ user: { id: user.id, email: user.email } });
+    res.json({
+      user: { id: user.id, email: user.email },
+      mfa: user.totp_enabled ? 'verify_required' : 'setup_required',
+    });
   });
 
   // 로그아웃: 서버 세션을 지우고, 브라우저에도 쿠키를 지우라고 알린다
@@ -120,9 +122,11 @@ function createAuthRouter({ db, cookieName, loginRateLimit }) {
     });
   });
 
-  // 내 정보: 서버가 이 요청을 누구의 로그인으로 보고 있는지 확인하는 용도
+  // 내 정보: 서버가 이 요청을 누구의 로그인으로, 어느 인증 단계까지로 보고 있는지 확인하는 용도
+  // (추가 인증 비밀값은 절대 넣지 않는다)
   router.get('/me', requireLogin(db), (req, res) => {
-    res.json({ user: req.user });
+    const { totp_enabled: enabled } = db.prepare('SELECT totp_enabled FROM users WHERE id = ?').get(req.user.id);
+    res.json({ user: req.user, mfa: { enabled: enabled === 1, verified: req.session.mfaVerified === true } });
   });
 
   return router;

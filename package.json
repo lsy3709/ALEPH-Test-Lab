@@ -11,7 +11,9 @@
     "test": "node --experimental-sqlite --disable-warning=ExperimentalWarning --test \"test/**/*.test.js\"",
     "users": "node --experimental-sqlite --disable-warning=ExperimentalWarning scripts/show-users.js",
     "sessions": "node --experimental-sqlite --disable-warning=ExperimentalWarning scripts/show-sessions.js",
-    "claim-memos": "node --experimental-sqlite --disable-warning=ExperimentalWarning scripts/claim-memos.js"
+    "claim-memos": "node --experimental-sqlite --disable-warning=ExperimentalWarning scripts/claim-memos.js",
+    "mfa-reset": "node --experimental-sqlite --disable-warning=ExperimentalWarning scripts/mfa-reset.js",
+    "password-reset": "node --experimental-sqlite --disable-warning=ExperimentalWarning scripts/password-reset.js"
   },
   "engines": {
     "node": ">=22.5"
@@ -20,6 +22,7 @@
     "@node-rs/argon2": "^2.2.1",
     "express": "^5.2.1",
     "express-rate-limit": "^8.7.0",
-    "express-session": "^1.19.0"
+    "express-session": "^1.19.0",
+    "otpauth": "^9.5.2"
   }
 }

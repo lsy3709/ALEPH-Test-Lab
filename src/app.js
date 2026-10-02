@@ -1,17 +1,20 @@
-// 앱 조립: 공통 설정 → 세션 → 계정 주소 → (로그인 확인 후) 메모 주소 → 404·오류 처리
+// 앱 조립: 공통 설정 → 세션 → 계정·추가 인증 주소 → (로그인 + 추가 인증 확인 후) 메모 주소 → 404·오류 처리
 const express = require('express');
 const session = require('express-session');
 const { createAuthRouter, requireLogin } = require('./auth');
+const { createMfaRouter, requireMfa } = require('./mfa');
 const { createMemosRouter } = require('./memos');
 const { SqliteSessionStore } = require('./session-store');
 
 const SESSION_COOKIE = 'memo.sid';
 const SESSION_IDLE_MS = 30 * 60 * 1000; // 30분 동안 요청이 없으면 로그인 만료
 const MIN_SECRET_LENGTH = 32;
+const REAL_CLOCK = { now: () => Date.now() };
 
 // sessionSecret: 세션 쿠키 서명용 비밀키(.env 의 SESSION_SECRET). 쿠키를 위조하지 못하게 한다.
-// loginRateLimit: 로그인 시도 제한 설정(테스트에서 바꿔 쓸 수 있음)
-function createApp({ db, sessionSecret, loginRateLimit } = {}) {
+// loginRateLimit, mfaLock: 로그인 시도 제한·추가 인증 잠금 설정(테스트에서 바꿔 쓸 수 있음)
+// clock: 지금 시각. 서버는 진짜 시각을 쓰고, 테스트만 가짜 시계를 넘긴다(API 로는 바꿀 수 없음).
+function createApp({ db, sessionSecret, loginRateLimit, mfaLock, clock = REAL_CLOCK } = {}) {
   if (typeof sessionSecret !== 'string' || sessionSecret.length < MIN_SECRET_LENGTH) {
     throw new Error(`SESSION_SECRET 은 ${MIN_SECRET_LENGTH}자 이상이어야 합니다.`);
   }
@@ -44,11 +47,14 @@ function createApp({ db, sessionSecret, loginRateLimit } = {}) {
     res.json({ ok: true });
   });
 
+  // 추가 인증 주소는 비밀번호 로그인(requireLogin)을 먼저 통과해야 쓸 수 있다
+  app.use('/auth/mfa', requireLogin(db), createMfaRouter({ db, clock, lock: mfaLock }));
+
   // 계정(가입·로그인·로그아웃·내 정보) 주소는 auth.js 에 모아 둔다
   app.use('/auth', createAuthRouter({ db, cookieName: SESSION_COOKIE, loginRateLimit }));
 
-  // 메모 주소는 문지기(requireLogin)를 먼저 통과해야 들어갈 수 있다
-  app.use('/memos', requireLogin(db), createMemosRouter({ db }));
+  // 메모 주소는 문지기 두 명을 차례로 통과해야 한다: 로그인(401) → 추가 인증 완료(403)
+  app.use('/memos', requireLogin(db), requireMfa(db), createMemosRouter({ db }));
 
   // 위 어디에도 해당하지 않는 주소
   app.use((req, res) => {
