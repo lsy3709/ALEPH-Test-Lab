@@ -1,0 +1,18 @@
+{
+  "name": "memo-lab",
+  "version": "0.1.0",
+  "private": true,
+  "description": "인증 실습용 개인 메모 API (가짜 데이터 전용)",
+  "type": "commonjs",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node --experimental-sqlite --disable-warning=ExperimentalWarning src/server.js",
+    "test": "node --experimental-sqlite --disable-warning=ExperimentalWarning --test \"test/**/*.test.js\""
+  },
+  "engines": {
+    "node": ">=22.5"
+  },
+  "dependencies": {
+    "express": "^5.2.1"
+  }
+}
